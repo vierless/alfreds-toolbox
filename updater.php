@@ -2,7 +2,7 @@
 // GitHub Update-Checker
 if (!class_exists('AlfredsToolbox_UpdateChecker')) {
     class AlfredsToolbox_UpdateChecker {
-        private $repo_url = 'https://api.github.com/repos/DEIN_GITHUB_BENUTZERNAME/alfreds-toolbox/releases/latest';
+        private $repo_url = 'https://api.github.com/repos/vierless/alfreds-toolbox/releases/latest';
         private $plugin_slug = 'alfreds-toolbox';
         
         public function __construct() {
@@ -56,6 +56,5 @@ if (!class_exists('AlfredsToolbox_UpdateChecker')) {
         }
     }
 
-    // Initialisiere den Update-Checker
     new AlfredsToolbox_UpdateChecker();
 }
