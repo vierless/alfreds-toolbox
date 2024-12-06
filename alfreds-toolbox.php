@@ -12,6 +12,19 @@ if (!defined('ABSPATH')) exit;
 require_once plugin_dir_path(__FILE__) . 'includes/settings.php';
 require_once plugin_dir_path(__FILE__) . 'includes/spotify-api.php';
 
+// Load update checker
+require 'plugin-update-checker/plugin-update-checker.php';
+use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
+
+$myUpdateChecker = PucFactory::buildUpdateChecker(
+	'https://github.com/vierless/alfreds-toolbox',
+	__FILE__,
+	'alfreds-toolbox'
+);
+
+$myUpdateChecker->setBranch('production'); // branch for releases
+// $myUpdateChecker->setAuthentication('your-token-here'); // for private repos
+
 class AlfredsToolbox {
     private $widgets = [];
     private $active_widgets = [];
@@ -172,4 +185,5 @@ class AlfredsToolbox {
 function init_alfreds_toolbox() {
     new AlfredsToolbox();
 }
+
 add_action('plugins_loaded', 'init_alfreds_toolbox');
