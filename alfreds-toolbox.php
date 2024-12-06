@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Alfreds Toolbox
  * Description: Custom Elementor Widgets
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: VIERLESS GmbH
  */
 

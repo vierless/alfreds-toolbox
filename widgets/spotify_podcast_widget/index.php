@@ -68,7 +68,7 @@ class SpotifyPodcastWidget extends \Elementor\Widget_Base {
     }
 
     public function get_description() {
-        return 'Zeigt Episoden eines Spotify Podcasts an';
+        return 'Zeigt Episoden eines Spotify Podcasts mit Verlinkung an';
     }
 
     public function get_icon() {
