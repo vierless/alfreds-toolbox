@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Alfreds Toolbox
  * Description: Custom Elementor Widgets
- * Version: 1.0.3
+ * Version: 1.0.4
  * Author: VIERLESS GmbH
  */
 
@@ -68,7 +68,6 @@ class AlfredsToolbox {
             while (false !== ($widget_folder = readdir($handle))) {
                 if ($widget_folder != "." && $widget_folder != "..") {
                     $widget_file = $widgets_dir . $widget_folder . '/index.php';
-                    error_log('Checking widget file: ' . $widget_file);
                     
                     if (file_exists($widget_file)) {
                         require_once $widget_file;
@@ -89,8 +88,6 @@ class AlfredsToolbox {
         }
     
         $this->active_widgets = (array) get_option('alfreds_toolbox_active_widgets', []);
-        error_log('Active widgets from DB: ' . print_r($this->active_widgets, true));
-        error_log('Available widgets: ' . print_r(array_keys($this->widgets), true));
     }
 
     private function get_widget_class_name($widget_id) {

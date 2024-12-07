@@ -10,7 +10,6 @@ jQuery(document).ready(function ($) {
 		const encodedSettings = button.data('settings');
 		const settings = JSON.parse(atob(encodedSettings));
 
-		// Verhindere mehrfaches Klicken während des Ladens
 		if (button.hasClass('loading')) {
 			return;
 		}
@@ -78,19 +77,16 @@ jQuery(document).ready(function ($) {
 	});
 
 	function renderEpisode(episode, settings) {
-		let html = '<div class="at_episode ' + 'at_layout-' + settings.layout + '">';
-
-		if (settings.link_type === 'box') {
-			html = '<a href="' + episode.external_urls.spotify + '" target="_blank">' + html;
-		}
+		// Box als Link oder Div
+		let html = settings.link_type === 'box' ? `<a href="${episode.external_urls.spotify}" target="_blank" class="at_episode at_layout-${settings.layout}">` : `<div class="at_episode at_layout-${settings.layout}">`;
 
 		// Cover
-		if (settings.show_cover === 'yes' && episode.images[0]?.url) {
+		if (settings.show_cover === 'yes' && episode.images?.[0]?.url) {
 			if (settings.link_type === 'cover') {
-				html += '<a href="' + episode.external_urls.spotify + '" target="_blank">';
+				html += `<a href="${episode.external_urls.spotify}" target="_blank">`;
 			}
 			html += '<div class="at_episode-cover">';
-			html += '<img src="' + episode.images[0].url + '" alt="' + episode.name + '">';
+			html += `<img src="${episode.images[0].url}" alt="${episode.name}">`;
 			html += '</div>';
 			if (settings.link_type === 'cover') {
 				html += '</a>';
@@ -99,30 +95,43 @@ jQuery(document).ready(function ($) {
 
 		html += '<div class="at_episode-content">';
 
-		// Title
+		// Title mit dynamischem Tag
 		if (settings.show_title === 'yes') {
-			const title = settings.link_type === 'title' ? '<a href="' + episode.external_urls.spotify + '" target="_blank">' + episode.name + '</a>' : episode.name;
-			html += '<h3 class="at_episode-title">' + title + '</h3>';
+			const tag = settings.title_tag || 'h3';
+			const title = settings.link_type === 'title' ? `<a href="${episode.external_urls.spotify}" target="_blank">${episode.name}</a>` : episode.name;
+			html += `<${tag} class="at_episode-title">${title}</${tag}>`;
 		}
 
-		// Description
-		if (settings.show_description === 'yes') {
-			html += '<div class="at_episode-description">' + episode.description + '</div>';
+		// Description mit Limit
+		if (settings.show_description === 'yes' && episode.description) {
+			let description = episode.description;
+
+			if (settings.description_limit !== 'none' && settings.description_limit_count) {
+				if (settings.description_limit === 'characters') {
+					if (description.length > settings.description_limit_count) {
+						description = description.substring(0, settings.description_limit_count) + '...';
+					}
+				} else if (settings.description_limit === 'words') {
+					const words = description.split(' ');
+					if (words.length > settings.description_limit_count) {
+						description = words.slice(0, settings.description_limit_count).join(' ') + '...';
+					}
+				}
+			}
+
+			html += `<p class="at_episode-description">${description}</p>`;
 		}
 
 		// Duration
 		if (settings.show_duration === 'yes' && episode.duration_ms) {
 			const duration = Math.round(episode.duration_ms / 60000);
-			html += '<div class="at_episode-duration">' + duration + ' Minuten</div>';
+			html += `<div class="at_episode-duration">${duration} Minuten</div>`;
 		}
 
-		html += '</div>'; // Ende .at_episode-content
+		html += '</div>';
 
-		if (settings.link_type === 'box') {
-			html += '</a>';
-		}
+		html += settings.link_type === 'box' ? '</a>' : '</div>';
 
-		html += '</div>'; // Ende .at_episode
 		return html;
 	}
 });

@@ -3,7 +3,7 @@ Contributors: vierless, julianwitzel
 Tags: Elementor, Widgets, VIERLESS, Alfred
 Requires at least: 6.6.2
 Tested up to: 6.6.2
-Stable tag: 1.0.3
+Stable tag: 1.0.4
 Requires PHP: 8.0
 License: Proprietary
 License URI: https://vierless.de/lizenz/
@@ -54,6 +54,14 @@ Alfreds Toolbox wurde nach höchsten Sicherheitsstandards entwickelt und wird re
 * Nutzen Sie die erweiterten Widgets nach Belieben
 
 == Changelog ==
+
+= 1.0.4 =
+* Fixed layout issue when linking the whole box in Spotify podcasts widget
+* Added functionality to limit output description length in Spotify podcasts widget
+* Fixed load more issue with non-dynamic title tags in Spotify podcasts widget
+* Added Spotify API caching in plugin settings
+* Updated Style Tab in Spotify podcasts widget
+* Added new CSS to Spotify podcasts widget
 
 = 1.0.3 =
 * Updated Spotify Widget (index, script, styles)
