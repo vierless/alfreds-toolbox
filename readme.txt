@@ -3,7 +3,7 @@ Contributors: vierless, julianwitzel
 Tags: Elementor, Widgets, VIERLESS, Alfred
 Requires at least: 6.6.2
 Tested up to: 6.6.2
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 Requires PHP: 8.0
 License: Proprietary
 License URI: https://vierless.de/lizenz/
@@ -54,6 +54,9 @@ Alfreds Toolbox wurde nach höchsten Sicherheitsstandards entwickelt und wird re
 * Nutzen Sie die erweiterten Widgets nach Belieben
 
 == Changelog ==
+
+= 1.0.3 =
+* Updated Spotify Widget (index, script, styles)
 
 = 1.0.2 =
 * Readme.txt aktualisiert
