@@ -123,6 +123,62 @@ jQuery(document).ready(function ($) {
 		$(this).closest('.at-widget-card').toggleClass('is-active', $(this).is(':checked'));
 	});
 
+	// Newsletter Signup Handler
+	$('#newsletter-submit').on('click', function () {
+		const $button = $(this);
+		const $container = $('#at-newsletter-container');
+		const email = $('#newsletter-email').val();
+		const privacyAccepted = $('#newsletter-privacy').is(':checked');
+
+		// Remove any existing messages
+		$container.find('.at-message').remove();
+
+		if (!email || !privacyAccepted) {
+			$container.append('<div class="at-message at-message-error">Bitte füllen Sie alle Pflichtfelder aus.</div>');
+			return;
+		}
+
+		// Disable form while submitting
+		$button.prop('disabled', true).text('Wird eingetragen...');
+		$container.find('input').prop('disabled', true);
+
+		$.ajax({
+			url: 'https://hook.eu1.make.com/09g2xlvx6iq4eur8sk3qi9gskt6s494u',
+			type: 'POST',
+			data: JSON.stringify({
+				email: email,
+				privacy_accepted: privacyAccepted,
+				domain: $('#newsletter-domain').val(),
+				language: $('#newsletter-language').val(),
+			}),
+			contentType: 'application/json',
+			success: function () {
+				$container.append('<div class="at-message at-message-success">Erfolgreich zum Newsletter angemeldet!</div>');
+
+				setTimeout(() => {
+					$container.find('.at-message').fadeOut(() => {
+						$container.find('.at-message').remove();
+					});
+				}, 3000);
+
+				$('#newsletter-email').val('');
+				$('#newsletter-privacy').prop('checked', false);
+			},
+			error: function () {
+				$container.append('<div class="at-message at-message-error">Es ist ein Fehler aufgetreten. Bitte versuchen Sie es später erneut.</div>');
+			},
+			complete: function () {
+				// Re-enable form
+				$button.prop('disabled', false).text('Jetzt eintragen');
+				$container.find('input').prop('disabled', false);
+			},
+		});
+	});
+	// Show checkbox when clicking into email field
+	$('#newsletter-email').on('click', function () {
+		$('.at-checkbox-group').addClass('is-visible');
+	});
+
 	// Cache Clear Funktionalität
 	$('#clear_spotify_cache').click(function () {
 		var button = $(this);

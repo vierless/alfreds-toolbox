@@ -116,6 +116,55 @@ a.at-nav-item:focus {
 	margin-top: 0.5rem;
 }
 
+/* Newsletter */
+.at-newsletter-container {
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+}
+
+.at-checkbox-group {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.5rem;
+}
+
+.at-checkbox-label {
+	font-size: 0.875rem;
+	color: var(--at--text-color);
+	display: flex;
+	gap: 0.5rem;
+	align-items: flex-start;
+	line-height: 1.4;
+}
+
+.at-checkbox-label input[type='checkbox'] {
+	margin-top: 0.2rem;
+}
+
+.at-checkbox-label a {
+	color: var(--at--primary-color-default);
+	text-decoration: none;
+}
+
+.at-checkbox-label a:hover {
+	color: var(--at--primary-color-hover);
+}
+
+.at-newsletter-container .at-message {
+	margin-bottom: 0;
+}
+
+.at-form-group.at-checkbox-group {
+	display: none;
+	align-items: flex-start;
+	gap: 0.5rem;
+}
+
+.at-checkbox-group.is-visible {
+	display: flex;
+}
+
 /* Status */
 .at-section-description.is-error {
 	color: var(--at--error-color);
@@ -524,9 +573,6 @@ select.at-select:focus {
 	border-color: var(--at--black);
 	box-shadow: none;
 	outline: none;
-}
-
-.at-description {
 }
 
 /* Starthilfe */

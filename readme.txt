@@ -55,6 +55,9 @@ Alfreds Toolbox wurde nach höchsten Sicherheitsstandards entwickelt und wird re
 
 == Changelog ==
 
+= 1.0.6 =
+* Added newsletter form to dashboard
+
 = 1.0.5 =
 * Updated settings page
 * Added admin-styles.css

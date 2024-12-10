@@ -169,9 +169,18 @@ class AlfredsToolboxSettings {
         // Projekt Settings
         register_setting('alfreds_toolbox_settings', 'awork_project_id');
         register_setting('alfreds_toolbox_settings', 'slack_channel_id');
-        register_setting('alfreds_toolbox_settings', 'developer');
-        register_setting('alfreds_toolbox_settings', 'projectmanager');
-        register_setting('alfreds_toolbox_settings', 'support_package');
+        register_setting('alfreds_toolbox_settings', 'developer', [
+            'type' => 'string',
+            'default' => 'rec87KE3hSmFzgq20'
+        ]);
+        register_setting('alfreds_toolbox_settings', 'projectmanager', [
+            'type' => 'string',
+            'default' => 'recPFPXHW30lTbUyQ'
+        ]);
+        register_setting('alfreds_toolbox_settings', 'support_package', [
+            'type' => 'integer',
+            'default' => 1
+        ]);
     
         // Dashboard Settings
         register_setting('alfreds_toolbox_settings', 'intro_video');
@@ -337,7 +346,7 @@ class AlfredsToolboxSettings {
                 </nav>
                 <div class="at-meta">
                     <div class="at-copyright">© 2024 VIERLESS GmbH</div>
-                    <div class="at-version">V.1.0.5</div>
+                    <div class="at-version">V.1.0.6</div>
                 </div>
             </div>
     
@@ -371,7 +380,7 @@ class AlfredsToolboxSettings {
                                     <h2 class="at-section-title">VIERLESS Wartung</h2>
                                     <div class="at-section-row">
                                         <?php 
-                                        $value = get_option('support_package');
+                                        $value = get_option('support_package', 1);
                                         $options = $this->get_support_package_options();
                                         $status_class = $value == 1 ? 'is-error' : ($value ? 'is-success' : '');
                                         $icon = $value == 1 ? $this->get_icon_svg('cross', 'at-status-icon') : ($value ? $this->get_icon_svg('check', 'at-status-icon') : '');
@@ -489,6 +498,34 @@ class AlfredsToolboxSettings {
                                     <a class="at-cta-banner" href="https://vierless.de/affiliates?utm_campaign=wordpress_alfreds_toolbox&utm_medium=affiliate_banner&utm_source=<?php echo esc_attr($this->get_base_domain()); ?>" target="_blank">
                                         <img src="<?php echo plugins_url('assets/images/partner-program.webp', dirname(__FILE__)); ?>" alt="Jetzt Affiliate werden" />
                                     </a>
+                                </div>
+                                <div class="at-section">
+                                    <h2 class="at-section-title">Unser Newsletter</h2>
+                                    <div id="at-newsletter-container" class="at-newsletter-container">
+                                        <input type="hidden" 
+                                            id="newsletter-domain" 
+                                            value="<?php echo esc_attr($this->get_base_domain()); ?>">
+                                        <input type="hidden"
+                                            id="newsletter-language"
+                                            value="<?php echo esc_attr(str_replace('_', '-', get_user_locale())); ?>">
+                                        <div class="at-form-group">
+                                            <input type="email" 
+                                                id="newsletter-email" 
+                                                class="at-input" 
+                                                placeholder="max.muster@abc.de"
+                                                autocomplete="off"
+                                                autocapitalize="off"
+                                                autocorrect="off"
+                                                spellcheck="false">
+                                        </div>
+                                        <div class="at-form-group at-checkbox-group">
+                                            <label class="at-checkbox-label">
+                                                <input type="checkbox" id="newsletter-privacy">
+                                                <span>Den Hinweisen zum <a href="https://vierless.de/datenschutz" target="_blank">Datenschutz</a> stimme ich zum Erhalt von Newsletter-Mailings zu.</span>
+                                            </label>
+                                        </div>
+                                        <button type="button" id="newsletter-submit" class="button at-button is-primary">Jetzt eintragen</button>
+                                    </div>
                                 </div>
                             </aside>
                         </div>
@@ -851,7 +888,7 @@ class AlfredsToolboxSettings {
     }
 
     public function render_developer_field() {
-        $value = get_option('developer');
+        $value = get_option('developer', 'rec87KE3hSmFzgq20');
         $options = [
             'rec87KE3hSmFzgq20' => 'Julian Witzel',
             'recZTtGK5QLkTsHFe' => 'Nicole Logiewa'
@@ -867,7 +904,7 @@ class AlfredsToolboxSettings {
     }
     
     public function render_project_manager_field() {
-        $value = get_option('projectmanager');
+        $value = get_option('projectmanager', 'recPFPXHW30lTbUyQ');
         $options = [
             'recPFPXHW30lTbUyQ' => 'Leonardo Lemos Rilk',
             'recbI0ZSM1VKTjFvK' => 'Claus Wiedemann'
