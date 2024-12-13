@@ -13,8 +13,8 @@ class GoogleAnalyticsAPI {
     
     public function __construct($property_id) {
         $this->property_id = $property_id;
-        $this->credentials_path = plugin_dir_path(__FILE__) . 'credentials/service-account.json';
-        $this->credentials = json_decode(file_get_contents($this->credentials_path), true);
+        require_once plugin_dir_path(__FILE__) . 'services/google-credentials.php';
+        $this->credentials = get_google_credentials();
     }
 
     public function clear_cache() {
