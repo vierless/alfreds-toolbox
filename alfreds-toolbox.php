@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Alfreds Toolbox
  * Description: Custom Elementor Widgets
- * Version: 1.0.6
+ * Version: 1.0.7
  * Author: VIERLESS GmbH
  */
 
@@ -11,6 +11,7 @@ if (!defined('ABSPATH')) exit;
 // Load includes before initializing main class
 require_once plugin_dir_path(__FILE__) . 'includes/settings.php';
 require_once plugin_dir_path(__FILE__) . 'includes/spotify-api.php';
+require_once plugin_dir_path(__FILE__) . 'includes/google-analytics-api.php';
 
 // Load update checker
 require 'plugin-update-checker/plugin-update-checker.php';

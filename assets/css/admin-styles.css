@@ -165,6 +165,181 @@ a.at-nav-item:focus {
 	display: flex;
 }
 
+/* Banner */
+.at-support-banner {
+	border-radius: 0.5rem;
+	background: -moz-linear-gradient(270deg, rgba(12, 12, 12, 1) 0%, rgba(19, 59, 41, 1) 100%);
+	background: -webkit-linear-gradient(270deg, rgba(12, 12, 12, 1) 0%, rgba(19, 59, 41, 1) 100%);
+	background: linear-gradient(270deg, rgba(12, 12, 12, 1) 0%, rgba(19, 59, 41, 1) 100%);
+	filter: progid:DXImageTransform.Microsoft.gradient(startColorstr="#0c0c0c",endColorstr="#133b29",GradientType=1);
+	display: flex;
+	gap: 2rem;
+	overflow: hidden;
+}
+.at-support-banner-col {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	justify-content: flex-end;
+	gap: 1.5rem;
+}
+.at-support-banner-col:first-of-type {
+	padding: 1.5rem;
+}
+.at-support-banner-title {
+	margin: 0;
+	color: #fff;
+	font-size: 2rem;
+	line-height: 1.2;
+	font-weight: 600;
+}
+.at-support-banner-image img {
+	max-width: 100%;
+	height: auto;
+	display: block;
+}
+
+/* Analytics Dashboard Styles */
+.at-analytics-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 1rem;
+	border: 1px solid var(--at-border-color);
+	border-radius: 0.5rem;
+	background: var(--at--neutral-100);
+	padding: 0.5rem;
+}
+
+.at-date-select,
+.at-analytics-actions {
+	display: flex;
+	gap: 0.5rem;
+}
+.at-analytics-header select.at-select {
+	max-width: 12.5rem;
+	padding-right: 2rem;
+	font-size: 0.875rem;
+}
+.at-analytics-header .at-button.is-primary {
+	padding: 0.5rem 1rem;
+}
+
+.at-analytics-grid {
+	margin-bottom: 1rem;
+}
+
+.at-widget-list-label {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.at-analytics-meta {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	font-size: 0.75rem;
+}
+
+.at-analytics-grid,
+.at-analytics-details-grid {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 1rem;
+}
+
+.at-widget-list-label svg,
+.at-widget-list-icon {
+	display: inline-block;
+	height: 1rem;
+	width: 1rem;
+}
+
+.at-widget-list-percent {
+	font-size: 0.6rem;
+	background: var(--at--neutral-100);
+	padding: 0.125rem 0.25rem;
+	border-radius: 0.25rem;
+	border: 1px solid var(--at-border-color);
+	margin-left: 0.5rem;
+	text-align: center;
+	display: inline-block;
+	width: 2rem;
+}
+
+.at-widget-list-item {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0.5rem 0;
+	border-bottom: 1px solid var(--at-border-color);
+}
+
+.at-widget-list-item:last-child {
+	border-bottom: none;
+}
+
+.at-widget-list-label {
+	font-size: 14px;
+	color: var(--at-text-color);
+}
+
+.at-widget-list-value {
+	font-weight: 500;
+}
+
+/* Analytics Debugger */
+.at-debug-section {
+	border: 1px solid #ddd;
+	padding: 1rem;
+	background: #fff;
+}
+
+.at-debug-section table input {
+	width: 100%;
+	padding: 5px;
+}
+
+.at-debug-section .difference {
+	font-weight: bold;
+}
+
+.at-debug-section .difference.positive {
+	color: #28a745;
+}
+
+.at-debug-section .difference.negative {
+	color: #dc3545;
+}
+
+/* Loading State */
+.loading {
+	opacity: 0.6;
+}
+
+.loading:after {
+	content: '...';
+	animation: dots 1s steps(5, end) infinite;
+}
+
+@keyframes dots {
+	0%,
+	20% {
+		content: '';
+	}
+	40% {
+		content: '.';
+	}
+	60% {
+		content: '..';
+	}
+	80%,
+	100% {
+		content: '...';
+	}
+}
+
 /* Status */
 .at-section-description.is-error {
 	color: var(--at--error-color);
@@ -175,6 +350,17 @@ a.at-nav-item:focus {
 .at-status-icon {
 	height: 1rem;
 	width: 1rem;
+}
+
+.at-support-id {
+	font-size: 0.75rem;
+	line-height: 1.2;
+	background: var(--at--neutral-100);
+	border: 1px solid var(--at-border-color);
+	color: var(--at--text-color);
+	font-weight: 600;
+	padding: 0.25rem 0.35rem;
+	border-radius: 0.25rem;
 }
 
 /* Add-Ons */
@@ -499,8 +685,10 @@ a.at-nav-item:focus {
 
 /* Sektionen */
 .at-section {
-	margin-bottom: 3rem;
 	width: 100%;
+}
+.at-section:not(:last-of-type) {
+	margin-bottom: 3rem;
 }
 
 .at-section-title {
@@ -925,6 +1113,10 @@ select.at-select:focus {
 	}
 	.at-widget-grid {
 		grid-template-columns: 1fr;
+	}
+	.at-analytics-grid,
+	.at-analytics-details-grid {
+		grid-template-columns: repeat(1, 1fr);
 	}
 
 	.at-widget-card {

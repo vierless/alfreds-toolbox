@@ -118,6 +118,219 @@ jQuery(document).ready(function ($) {
 		initializeRemoveButtons();
 	}
 
+	// Initial load of analytics data
+	function initializeAnalyticsData() {
+		const container = $('#analytics-data-container');
+		const dateSelect = $('#analytics-date-range');
+
+		// Check if container exists
+		if (!container.length) return;
+
+		// Try to load cached data first
+		loadAnalyticsData(true).then((success) => {
+			if (!success) {
+				// If no cached data, load fresh data
+				loadAnalyticsData(false);
+			}
+		});
+	}
+
+	function loadAnalyticsData(fromCacheOnly = false) {
+		const range = $('#analytics-date-range').val();
+		const container = $('#analytics-data-container');
+		const button = $('#load-analytics-data');
+
+		// Update UI state
+		button.prop('disabled', true).html('<span class="loading">Lade Daten</span>');
+		container.css('opacity', '0.6');
+
+		return $.ajax({
+			url: ajaxurl,
+			method: 'POST',
+			data: {
+				action: 'get_analytics_data',
+				date_range: range,
+				from_cache_only: fromCacheOnly,
+				nonce: alfreds_toolbox.nonce,
+			},
+		})
+			.then((response) => {
+				if (response.success && response.data) {
+					updateDashboardData(response.data);
+					return true;
+				}
+				return false;
+			})
+			.catch(() => false)
+			.always(() => {
+				button.prop('disabled', false).html('Anwenden');
+				container.css('opacity', '1');
+			});
+	}
+
+	// Update dashboard with analytics data
+	function updateDashboardData(data) {
+		// Update Overview Cards
+		Object.keys(data.overview).forEach(function (key) {
+			const metric = data.overview[key];
+			let value = metric.current;
+
+			if (key === 'bounceRate' || key === 'engagementRate') {
+				value = value.toFixed(2) + '%';
+			} else if (key === 'avgDuration') {
+				value = metric.current;
+			} else {
+				value = new Intl.NumberFormat('de-DE').format(value);
+			}
+
+			$(`.at-widget-card:contains("${metric.label}") .at-widget-description`).text(value);
+		});
+
+		// Update Lists
+		updateListSection('Top Seiten', data.topPages);
+		updateListSection('Geräte', data.devices);
+		updateListSection('Browser', data.browsers);
+		updateListSection('Länder', data.countries);
+	}
+
+	// Helper function to update list sections
+	function updateListSection(title, items) {
+		let listHtml = '';
+
+		if (title === 'Browser') {
+			Object.entries(items).forEach(([browserName, data]) => {
+				const formattedNumber = new Intl.NumberFormat('de-DE').format(data.users);
+				const formattedPercent = new Intl.NumberFormat('de-DE', {
+					minimumFractionDigits: 1,
+					maximumFractionDigits: 1,
+					useGrouping: false,
+				}).format(data.percent);
+
+				// Sicherheitscheck für browserSvg
+				const browserSvg = data.browserSvg || '';
+
+				listHtml += `
+					<div class="at-widget-list-item">
+						<span class="at-widget-list-label">
+							${browserSvg}
+							${escapeHtml(data.name)}
+						</span>
+						<div class="at-widget-list-value">
+							<span class="at-widget-list-number">${formattedNumber}</span>
+							<span class="at-widget-list-percent">${formattedPercent}%</span>
+						</div>
+					</div>
+				`;
+			});
+		} else if (title === 'Länder') {
+			Object.entries(items).forEach(([countryCode, data]) => {
+				const formattedNumber = new Intl.NumberFormat('de-DE').format(data.users);
+				const formattedPercent = new Intl.NumberFormat('de-DE', {
+					minimumFractionDigits: 1,
+					maximumFractionDigits: 1,
+					useGrouping: false,
+				}).format(data.percent);
+
+				// PHP escaped bereits das SVG für uns
+				listHtml += `
+                <div class="at-widget-list-item">
+                    <span class="at-widget-list-label">
+                        ${data.flagSvg}
+                        ${escapeHtml(data.name)}
+                    </span>
+                    <div class="at-widget-list-value">
+                        <span class="at-widget-list-number">${formattedNumber}</span>
+                        <span class="at-widget-list-percent">${formattedPercent}%</span>
+                    </div>
+                </div>
+            `;
+			});
+		} else if (title === 'Top Seiten') {
+			items.forEach((item) => {
+				listHtml += `
+					<div class="at-widget-list-item">
+						<span class="at-widget-list-label">${escapeHtml(item.path)}</span>
+						<span class="at-widget-list-value">${new Intl.NumberFormat('de-DE').format(item.views)}</span>
+					</div>
+				`;
+			});
+		} else {
+			Object.entries(items).forEach(([name, data]) => {
+				const formattedNumber = new Intl.NumberFormat('de-DE').format(data.users);
+				const formattedPercent = new Intl.NumberFormat('de-DE', {
+					minimumFractionDigits: 1,
+					maximumFractionDigits: 1,
+					useGrouping: false,
+				}).format(data.percent);
+
+				let icon = '';
+				if (title === 'Browser') {
+					const browserIcon = getBrowserIcon(name.toLowerCase());
+					icon = `<img src="${browserIcon}" class="at-widget-list-icon" alt="${name}">`;
+				} else if (title === 'Länder') {
+					const countryCode = data.countryCode || getCountryCode(name);
+					const flagIcon = getFlagIcon(countryCode);
+					icon = `<img src="${flagIcon}" class="at-widget-list-icon" alt="${name}">`;
+				}
+
+				listHtml += `
+					<div class="at-widget-list-item">
+						<span class="at-widget-list-label">
+							${icon}
+							${escapeHtml(name)}
+						</span>
+						<div class="at-widget-list-value">
+							<span class="at-widget-list-number">${formattedNumber}</span>
+							<span class="at-widget-list-percent">${formattedPercent}%</span>
+						</div>
+					</div>
+				`;
+			});
+		}
+
+		$(`.at-widget-card:contains("${title}") .at-widget-list`).html(listHtml);
+	}
+
+	// Helper Funktionen für Icons
+	function getBrowserIcon(browser) {
+		const iconPath = alfreds_toolbox.plugin_url + '/assets/icons/browsers/';
+		const browserIcons = {
+			chrome: 'chrome.svg',
+			firefox: 'firefox.svg',
+			safari: 'safari.svg',
+			edge: 'edge.svg',
+			opera: 'opera.svg',
+			// ... weitere Browser
+		};
+
+		return iconPath + (browserIcons[browser] || 'browser-default.svg');
+	}
+
+	function getFlagIcon(countryCode) {
+		const iconPath = alfreds_toolbox.plugin_url + '/assets/icons/flags/';
+		return iconPath + (countryCode ? `${countryCode}.svg` : 'globe.svg');
+	}
+
+	function getCountryCode(countryName) {
+		const countryMapping = {
+			Deutschland: 'DE',
+			Österreich: 'AT',
+			Schweiz: 'CH',
+			// ... weitere Länder
+		};
+
+		return countryMapping[countryName] || null;
+	}
+
+	// Helper function to escape HTML
+	function escapeHtml(unsafe) {
+		if (!unsafe) return ''; // Sicherheitscheck hinzugefügt
+		return unsafe.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+	}
+
+	// Initialize on page load
+	initializeAnalyticsData();
+
 	// Widget Toggle Card Status
 	$('.at-switch input[type="checkbox"]').on('change', function () {
 		$(this).closest('.at-widget-card').toggleClass('is-active', $(this).is(':checked'));
@@ -204,9 +417,46 @@ jQuery(document).ready(function ($) {
 		);
 	});
 
+	// Event handler for manual refresh
+	$('#load-analytics-data').on('click', function () {
+		loadAnalyticsData(false);
+	});
+
+	// Automatically load data when the tab is shown
+	$('.at-nav-item[href="#statistiken"]').on('click', function () {
+		$('#load-analytics-data').click();
+	});
+
+	// Cache clear button
+	$('#clear-analytics-cache').on('click', function () {
+		var button = $(this);
+		button.prop('disabled', true);
+
+		$.ajax({
+			url: ajaxurl,
+			data: {
+				action: 'clear_analytics_cache',
+				nonce: alfreds_toolbox.nonce,
+			},
+			success: function (response) {
+				if (response.success) {
+					location.reload();
+				} else {
+					alert('Fehler beim Leeren des Cache');
+				}
+			},
+			error: function () {
+				alert('Fehler beim Leeren des Cache');
+			},
+			complete: function () {
+				button.prop('disabled', false);
+			},
+		});
+	});
+
 	// FAQ Toggle
-	$('.at-faq-title').on('click', function () {
-		const $item = $(this).closest('.at-faq-item');
+	$('.at-faq-item').on('click', function () {
+		const $item = $(this);
 		const $content = $item.find('.at-faq-description');
 
 		if ($item.hasClass('is-active')) {
@@ -226,6 +476,7 @@ jQuery(document).ready(function ($) {
 
 	// Settings Form Submit
 	$('#at-settings-form').on('submit', function (e) {
+		console.log('Form submitted');
 		e.preventDefault();
 
 		const $form = $(this);

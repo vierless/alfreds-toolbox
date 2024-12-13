@@ -16,6 +16,8 @@ class AlfredsToolboxSettings {
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
         add_action('wp_ajax_clear_spotify_cache', [$this, 'handle_clear_cache']);
         add_action('wp_ajax_save_alfreds_toolbox_settings', [$this, 'handle_save_settings']);
+        add_action('wp_ajax_get_analytics_data', [$this, 'handle_analytics_data']);
+        add_action('wp_ajax_clear_analytics_cache', [$this, 'handle_analytics_cache_clear']);
     }
 
     public function handle_redirect() {
@@ -92,12 +94,11 @@ class AlfredsToolboxSettings {
             'spotify_client_id',
             'spotify_client_secret',
             'spotify_cache_duration',
-            'awork_project_id',
-            'slack_channel_id',
-            'developer',
-            'projectmanager',
+            'support_id',
             'support_package',
             'intro_video',
+            'ga_property_id',
+            'ga_api_secret',
             'replace_dashboard'
         ];
     
@@ -166,22 +167,17 @@ class AlfredsToolboxSettings {
             'sanitize_callback' => 'absint'
         ]);
     
-        // Projekt Settings
-        register_setting('alfreds_toolbox_settings', 'awork_project_id');
-        register_setting('alfreds_toolbox_settings', 'slack_channel_id');
-        register_setting('alfreds_toolbox_settings', 'developer', [
-            'type' => 'string',
-            'default' => 'rec87KE3hSmFzgq20'
-        ]);
-        register_setting('alfreds_toolbox_settings', 'projectmanager', [
-            'type' => 'string',
-            'default' => 'recPFPXHW30lTbUyQ'
-        ]);
+        // Support Settings
         register_setting('alfreds_toolbox_settings', 'support_package', [
             'type' => 'integer',
             'default' => 1
         ]);
+        register_setting('alfreds_toolbox_settings', 'support_id');
     
+        // GA Settings
+        register_setting('alfreds_toolbox_settings', 'ga_property_id');
+        register_setting('alfreds_toolbox_settings', 'ga_api_secret');
+
         // Dashboard Settings
         register_setting('alfreds_toolbox_settings', 'intro_video');
         register_setting('alfreds_toolbox_settings', 'replace_dashboard', ['type' => 'boolean', 'default' => false]);
@@ -259,6 +255,65 @@ class AlfredsToolboxSettings {
         <?php
     }
 
+    public function handle_analytics_cache_clear() {
+        check_ajax_referer('alfreds_toolbox_settings', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Insufficient permissions');
+        }
+    
+        $analytics_api = new GoogleAnalyticsAPI(
+            get_option('ga_property_id'),
+            get_option('ga_api_secret')
+        );
+        
+        $analytics_api->clear_cache();
+        wp_send_json_success();
+    }
+    
+    public function handle_analytics_data() {
+        check_ajax_referer('alfreds_toolbox_settings', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Insufficient permissions');
+        }
+    
+        $date_range = isset($_REQUEST['date_range']) ? sanitize_text_field($_REQUEST['date_range']) : 'last30days';
+        $from_cache_only = isset($_REQUEST['from_cache_only']) && $_REQUEST['from_cache_only'] === 'true';
+        
+        $property_id = get_option('ga_property_id');
+        $api_secret = get_option('ga_api_secret');
+        
+        if (empty($property_id) || empty($api_secret)) {
+            wp_send_json_error('Missing configuration');
+            return;
+        }
+        
+        // Try to get cached data first
+        $cache_key = 'ga_data_' . $property_id . '_' . $date_range;
+        $cached_data = get_transient($cache_key);
+        
+        if ($cached_data !== false) {
+            wp_send_json_success($cached_data);
+            return;
+        }
+        
+        if ($from_cache_only) {
+            wp_send_json_error('No cached data available');
+            return;
+        }
+        
+        $analytics_api = new GoogleAnalyticsAPI($property_id, $api_secret);
+        $data = $analytics_api->get_analytics_data($date_range);
+        
+        if (is_wp_error($data)) {
+            wp_send_json_error($data->get_error_message());
+            return;
+        }
+        
+        wp_send_json_success($data);
+    }
+
     private function render_video_item($index, $video) {
         ?>
         <div class="at-video-item-row">
@@ -323,6 +378,13 @@ class AlfredsToolboxSettings {
                         <span class="at-nav-item-label">Integrationen</span>
                     </a>
 
+                    <a href="#statistiken" class="at-nav-item">
+                        <span class="at-nav-item-icon">
+                            <?php echo $this->get_icon_svg('analytics'); ?>
+                        </span>
+                        <span class="at-nav-item-label">Statistiken</span>
+                    </a>
+
                     <a href="#add-ons" class="at-nav-item">
                         <span class="at-nav-item-icon">
                             <?php echo $this->get_icon_svg('add-on'); ?>
@@ -346,7 +408,7 @@ class AlfredsToolboxSettings {
                 </nav>
                 <div class="at-meta">
                     <div class="at-copyright">© 2024 VIERLESS GmbH</div>
-                    <div class="at-version">V.1.0.6</div>
+                    <div class="at-version">V.1.0.7</div>
                 </div>
             </div>
     
@@ -370,8 +432,11 @@ class AlfredsToolboxSettings {
                                 <div class="at-greeting">
                                     <div class="at-greeting-title">
                                         Hallo <?php 
-                                        $current_user = wp_get_current_user();
-                                        echo esc_html($current_user->display_name);
+                                        $first_name = get_user_meta(get_current_user_id(), 'first_name', true);
+                                        if (!$first_name) {
+                                            $first_name = wp_get_current_user()->display_name;
+                                        }
+                                        echo esc_html($first_name);
                                         ?>!
                                     </div>
                                     <div class="at-greeting-description">Willkommen zurück!</div>
@@ -381,6 +446,7 @@ class AlfredsToolboxSettings {
                                     <div class="at-section-row">
                                         <?php 
                                         $value = get_option('support_package', 1);
+                                        $support_id = get_option('support_id');
                                         $options = $this->get_support_package_options();
                                         $status_class = $value == 1 ? 'is-error' : ($value ? 'is-success' : '');
                                         $icon = $value == 1 ? $this->get_icon_svg('cross', 'at-status-icon') : ($value ? $this->get_icon_svg('check', 'at-status-icon') : '');
@@ -391,7 +457,11 @@ class AlfredsToolboxSettings {
                                                 <?php echo $icon; ?>
                                             <?php endif; ?>
                                             <?php echo esc_html($options[$value] ?? 'Nicht festgelegt'); ?>
+                                            <?php if ($value > 1 && $support_id): ?>
+                                                <div class="at-support-id"><?php echo 'Support ID: ' . esc_html($support_id); ?></div>
+                                            <?php endif; ?>
                                         </div>
+
                                         <?php if ($value == 1): ?>
                                             <a href="https://vierless.de/anfrage?utm_campaign=wordpress_alfreds_toolbox&utm_medium=activate_support&utm_source=<?php echo esc_attr($this->get_base_domain()); ?>" target="_blank" class="button at-button is-primary">Vertrieb kontaktieren</a>
                                         <?php elseif ($value == 2): ?>
@@ -516,7 +586,8 @@ class AlfredsToolboxSettings {
                                                 autocomplete="off"
                                                 autocapitalize="off"
                                                 autocorrect="off"
-                                                spellcheck="false">
+                                                spellcheck="false"
+                                                form="newsletter-only">
                                         </div>
                                         <div class="at-form-group at-checkbox-group">
                                             <label class="at-checkbox-label">
@@ -612,6 +683,165 @@ class AlfredsToolboxSettings {
                         </div>
                     </div>
 
+                    <!-- Statistiken Tab -->
+                    <div id="statistiken" class="at-tab-content">
+                        <div class="at-section">
+                            <h2 class="at-section-title">Google Analytics</h2>
+                            <?php
+                            // Render fallbacks and check if we should show analytics
+                            if ($this->render_analytics_fallbacks()):
+                            ?>
+                                <!-- Analytics Content -->
+                                <div id="analytics-data-container">
+                                    <!-- Date Range Selector -->
+                                    <div class="at-analytics-header">
+                                        <div class="at-date-select">
+                                            <select id="analytics-date-range" class="at-select">
+                                                <option value="today">Heute</option>
+                                                <option value="yesterday">Gestern</option>
+                                                <option value="last7days">Letzte 7 Tage</option>
+                                                <option value="last30days" selected>Letzte 30 Tage</option>
+                                                <option value="thisMonth">Dieser Monat</option>
+                                                <option value="lastMonth">Letzter Monat</option>
+                                            </select>
+                                            <button type="button" id="load-analytics-data" class="button at-button is-primary">
+                                                Anwenden
+                                            </button>
+                                        </div>
+                                        <div class="at-analytics-actions">
+                                            <button type="button" id="clear-analytics-cache" class="at-button is-secondary is-icon">
+                                                <?php echo $this->get_icon_svg('refresh'); ?>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <!-- Overview Cards -->
+                                    <div class="at-analytics-grid">
+                                        <!-- Visitors Card -->
+                                        <div class="at-widget-card">
+                                            <div class="at-widget-card-header">
+                                                <div class="at-widget-icon">
+                                                    <?php echo $this->get_icon_svg('eye'); ?>
+                                                </div>
+                                                <div class="at-widget-info">
+                                                    <h3 class="at-widget-title">Besucher</h3>
+                                                    <p class="at-widget-description">0</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Pageviews Card -->
+                                        <div class="at-widget-card">
+                                            <div class="at-widget-card-header">
+                                                <div class="at-widget-icon">
+                                                    <?php echo $this->get_icon_svg('cursor'); ?>
+                                                </div>
+                                                <div class="at-widget-info">
+                                                    <h3 class="at-widget-title">Seitenaufrufe</h3>
+                                                    <p class="at-widget-description">0</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Average Duration Card -->
+                                        <div class="at-widget-card">
+                                            <div class="at-widget-card-header">
+                                                <div class="at-widget-icon">
+                                                    <?php echo $this->get_icon_svg('time'); ?>
+                                                </div>
+                                                <div class="at-widget-info">
+                                                    <h3 class="at-widget-title">Durchschn. Dauer</h3>
+                                                    <p class="at-widget-description">0:00</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Bounce Rate Card -->
+                                        <div class="at-widget-card">
+                                            <div class="at-widget-card-header">
+                                                <div class="at-widget-icon">
+                                                    <?php echo $this->get_icon_svg('exit'); ?>
+                                                </div>
+                                                <div class="at-widget-info">
+                                                    <h3 class="at-widget-title">Absprungrate</h3>
+                                                    <p class="at-widget-description">0%</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Top Pages -->
+                                        <div class="at-widget-card">
+                                            <div class="at-widget-card-header">
+                                                <div class="at-widget-icon">
+                                                    <?php echo $this->get_icon_svg('flame'); ?>
+                                                </div>
+                                                <div class="at-widget-info">
+                                                    <h3 class="at-widget-title">Top Seiten</h3>
+                                                    <div class="at-widget-list"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Devices -->
+                                        <div class="at-widget-card">
+                                            <div class="at-widget-card-header">
+                                                <div class="at-widget-icon">
+                                                    <?php echo $this->get_icon_svg('devices'); ?>
+                                                </div>
+                                                <div class="at-widget-info">
+                                                    <h3 class="at-widget-title">Geräte</h3>
+                                                    <div class="at-widget-list"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Browsers -->
+                                        <div class="at-widget-card">
+                                            <div class="at-widget-card-header">
+                                                <div class="at-widget-icon">
+                                                    <?php echo $this->get_icon_svg('world'); ?>
+                                                </div>
+                                                <div class="at-widget-info">
+                                                    <h3 class="at-widget-title">Browser</h3>
+                                                    <div class="at-widget-list"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Countries -->
+                                        <div class="at-widget-card">
+                                            <div class="at-widget-card-header">
+                                                <div class="at-widget-icon">
+                                                    <?php echo $this->get_icon_svg('flag'); ?>
+                                                </div>
+                                                <div class="at-widget-info">
+                                                    <h3 class="at-widget-title">Länder</h3>
+                                                    <div class="at-widget-list"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <?php
+                                    $property_id = get_option('ga_property_id');
+                                    $cache_key = 'ga_data_' . $property_id . '_' . (isset($_GET['date_range']) ? $_GET['date_range'] : 'last30days');
+                                    $cache_data = get_transient($cache_key);
+                                    ?>
+                                    <div class="at-analytics-meta">
+                                        <div class="at-analytics-meta-item">
+                                            <span class="at-analytics-meta-label">Zuletzt aktualisiert:</span>
+                                            <span class="at-analytics-meta-value">
+                                                <?php echo esc_html($this->get_cache_timestamp($cache_key)); ?>
+                                            </span>
+                                        </div>
+                                        <div class="at-analytics-meta-item">
+                                            <span class="at-analytics-meta-label">Property ID:</span>
+                                            <span class="at-analytics-meta-value"><?php echo esc_html($property_id); ?></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
                     <!-- Add-Ons -->
                     <div id="add-ons" class="at-tab-content">
                         <div class="at-section">
@@ -623,7 +853,7 @@ class AlfredsToolboxSettings {
                                     <h3 class="at-add-on-title">Basis Paket</h3>
                                     <div class="at-add-on-body">
                                         <div class="at-add-on-image">
-                                            <img src="https://placehold.co/108x108" alt="Add-On Bild" />
+                                            <img src="<?php echo plugins_url('assets/images/addon-.webp', dirname(__FILE__)); ?>" alt="Add-On Bild" />
                                         </div>
                                         <div class="at-add-on-text">
                                             <p><strong>Ihr Einstieg in die digitale Welt – leistungsstarke Webseitenlösungen für jedes Budget.</strong></p>
@@ -636,7 +866,7 @@ class AlfredsToolboxSettings {
                                     <h3 class="at-add-on-title">Performance Wartung</h3>
                                     <div class="at-add-on-body">
                                         <div class="at-add-on-image">
-                                            <img src="https://placehold.co/108x108" alt="Add-On Bild" />
+                                            <img src="<?php echo plugins_url('assets/images/addon-.webp', dirname(__FILE__)); ?>" alt="Add-On Bild" />
                                         </div>
                                         <div class="at-add-on-text">
                                             <p><strong>Schnell, sicher, zuverlässig – regelmäßige Updates und Optimierungen für Ihre Website.</strong></p>
@@ -655,7 +885,7 @@ class AlfredsToolboxSettings {
                                     <h3 class="at-add-on-title">Foto- & Videoproduktion</h3>
                                     <div class="at-add-on-body">
                                         <div class="at-add-on-image">
-                                            <img src="https://placehold.co/108x108" alt="Add-On Bild" />
+                                            <img src="<?php echo plugins_url('assets/images/addon-.webp', dirname(__FILE__)); ?>" alt="Add-On Bild" />
                                         </div>
                                         <div class="at-add-on-text">
                                             <p><strong>Hochwertige visuelle Inhalte, die Ihre Marke perfekt in Szene setzen – kreativ und wirkungsvoll.</strong></p>
@@ -668,7 +898,7 @@ class AlfredsToolboxSettings {
                                     <h3 class="at-add-on-title">Online Marketing (Google, Facebook, Instagram)</h3>
                                     <div class="at-add-on-body">
                                         <div class="at-add-on-image">
-                                            <img src="https://placehold.co/108x108" alt="Add-On Bild" />
+                                            <img src="<?php echo plugins_url('assets/images/addon-.webp', dirname(__FILE__)); ?>" alt="Add-On Bild" />
                                         </div>
                                         <div class="at-add-on-text">
                                             <p><strong>Gezielte Kampagnen auf den stärksten Plattformen – mehr Reichweite, mehr Erfolg.</strong></p>
@@ -681,7 +911,7 @@ class AlfredsToolboxSettings {
                                     <h3 class="at-add-on-title">SEO (Suchmaschinenoptimierung)</h3>
                                     <div class="at-add-on-body">
                                         <div class="at-add-on-image">
-                                            <img src="https://placehold.co/108x108" alt="Add-On Bild" />
+                                            <img src="<?php echo plugins_url('assets/images/addon-.webp', dirname(__FILE__)); ?>" alt="Add-On Bild" />
                                         </div>
                                         <div class="at-add-on-text">
                                             <p><strong>Bessere Rankings, mehr Besucher – wir machen Ihre Website sichtbar.</strong></p>
@@ -694,7 +924,7 @@ class AlfredsToolboxSettings {
                                     <h3 class="at-add-on-title">Automatisierungen & API-Integration</h3>
                                     <div class="at-add-on-body">
                                         <div class="at-add-on-image">
-                                            <img src="https://placehold.co/108x108" alt="Add-On Bild" />
+                                            <img src="<?php echo plugins_url('assets/images/addon-.webp', dirname(__FILE__)); ?>" alt="Add-On Bild" />
                                         </div>
                                         <div class="at-add-on-text">
                                             <p><strong>Effizientere Workflows und nahtlose Verbindungen für maximale Produktivität.</strong></p>
@@ -707,7 +937,7 @@ class AlfredsToolboxSettings {
                                     <h3 class="at-add-on-title">Social Media Betreuung</h3>
                                     <div class="at-add-on-body">
                                         <div class="at-add-on-image">
-                                            <img src="https://placehold.co/108x108" alt="Add-On Bild" />
+                                            <img src="<?php echo plugins_url('assets/images/addon-.webp', dirname(__FILE__)); ?>" alt="Add-On Bild" />
                                         </div>
                                         <div class="at-add-on-text">
                                             <p><strong>Professionelle Inhalte und Strategien für Ihre Präsenz auf allen Kanälen.</strong></p>
@@ -720,7 +950,7 @@ class AlfredsToolboxSettings {
                                     <h3 class="at-add-on-title">Landing Pages & Funnels</h3>
                                     <div class="at-add-on-body">
                                         <div class="at-add-on-image">
-                                            <img src="https://placehold.co/108x108" alt="Add-On Bild" />
+                                            <img src="<?php echo plugins_url('assets/images/addon-.webp', dirname(__FILE__)); ?>" alt="Add-On Bild" />
                                         </div>
                                         <div class="at-add-on-text">
                                             <p><strong>Optimierte Seiten, die Kunden überzeugen – der Schlüssel zu mehr Conversions.</strong></p>
@@ -790,39 +1020,47 @@ class AlfredsToolboxSettings {
                                 </div>
                             </div>
                         <?php endif; ?>
+                        <div class="at-section">
+                            <h2 class="at-section-title">Experten Hilfe</h2>
+                            <div class="at-support-banner">
+                                <?php 
+                                $options = $this->get_support_package_options();
+                                $support_id = get_option('support_id');
+                                ?>
+                                <div class="at-support-banner-col">
+                                    <h3 class="at-support-banner-title">
+                                        Erhalten Sie direkte Hilfe von unseren Entwicklern.
+                                    </h3>
+                                    <?php if ($value == 1): ?>
+                                        <a href="https://vierless.de/anfrage?referrer=<?php echo esc_attr($this->get_base_domain()); ?>&support_id=<?php echo esc_attr($support_id); ?>" target="_blank" class="button at-button is-primary">Vertrieb kontaktieren</a>
+                                    <?php else: ?>
+                                        <a href="https://vierless.de/support?id=<?php echo esc_attr($support_id); ?>" target="_blank" class="button at-button is-primary">Zum Support Formular</a>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="at-support-banner-col">
+                                    <div class="at-support-banner-image">
+                                        <img src="<?php echo plugins_url('assets/images/support-banner.webp', dirname(__FILE__)); ?>" alt="VIERLESS Support bei der Arbeit" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Einstellungen Tab -->
                     <div id="einstellungen" class="at-tab-content">
                         <div class="at-section">
-                            <h2 class="at-section-title">Projekt einrichten</h2>
-                            <p class="at-section-description">Nutze unsere Integrationen mit Awork & Slack um den Support zu automatisieren.</p>
+                        <h2 class="at-section-title">Projekt einrichten</h2>
+                            <p class="at-section-description">Grundeinstellungen für den Support.</p>
                             <fieldset class="at-form-fieldset">
-                                <div class="at-form-group">
-                                    <label class="at-label" for="awork_project_id">Awork Projekt ID</label>
-                                    <?php $this->render_awork_project_field(); ?>
-                                </div>
-                                
-                                <div class="at-form-group">
-                                    <label class="at-label" for="slack_channel_id">Slack Channel ID</label>
-                                    <?php $this->render_slack_channel_field(); ?>
-                                </div>
-                                
-                                <div class="at-form-group">
-                                    <label class="at-label" for="developer">Entwickler</label>
-                                    <?php $this->render_developer_field(); ?>
-                                </div>
-
-                                <div class="at-form-group">
-                                    <label class="at-label" for="projectmanager">Projekt Manager</label>
-                                    <?php $this->render_project_manager_field(); ?>
-                                </div>
-                                
                                 <div class="at-form-group">
                                     <label class="at-label" for="support">Support Paket</label>
                                     <?php $this->render_support_package_field(); ?>
                                 </div>
 
+                                <div class="at-form-group">
+                                    <label class="at-label" for="support_id">Support ID</label>
+                                    <?php $this->render_support_id_field(); ?>
+                                </div>
                             </fieldset>
                         </div>
                         <?php $this->render_tutorial_videos_section(); ?>
@@ -843,6 +1081,21 @@ class AlfredsToolboxSettings {
 
                             </fieldset>
                         </div>
+                        <div class="at-section">
+                        <h2 class="at-section-title">Google Analytics</h2>
+                            <p class="at-section-description">Verbinde eine Property.</p>
+                            <fieldset class="at-form-fieldset">
+                                <div class="at-form-group">
+                                    <label class="at-label" for="support">Property ID</label>
+                                    <?php $this->render_ga_property_id_field(); ?>
+                                </div>
+
+                                <div class="at-form-group">
+                                    <label class="at-label" for="support_id">API Secret</label>
+                                    <?php $this->render_ga_api_secret_field(); ?>
+                                </div>
+                            </fieldset>
+                        </div>
                         <div class="at-submit-wrapper">
                             <?php submit_button('Änderungen speichern', 'at-button is-primary'); ?>
                         </div>
@@ -853,6 +1106,151 @@ class AlfredsToolboxSettings {
         <?php
     }
 
+    private function render_analytics_fallbacks() {
+        $support_package = get_option('support_package', 1);
+        $property_id = get_option('ga_property_id');
+        
+        // Case 1: Kein Performance Paket
+        if ($support_package < 3) {
+            ?>
+            <div class="at-analytics-fallback">
+                <div class="at-analytics-fallback-content">
+                    <div class="at-analytics-fallback-icon">
+                        <?php echo $this->get_icon_svg('lock'); ?>
+                    </div>
+                    <h3>Analytics ist Teil des Performance Pakets</h3>
+                    <p>Upgrade auf das Performance Paket um detaillierte Statistiken einsehen zu können.</p>
+                    <a href="https://vierless.de/anfrage?utm_campaign=wordpress_alfreds_toolbox&utm_medium=upgrade_support&utm_source=<?php echo esc_attr($this->get_base_domain()); ?>" 
+                       class="button at-button is-primary" 
+                       target="_blank">
+                        Jetzt upgraden
+                    </a>
+                </div>
+            </div>
+            <?php
+            return;
+        }
+        
+        // Case 2: Keine Property ID
+        if (empty($property_id)) {
+            ?>
+            <div class="at-analytics-fallback">
+                <div class="at-analytics-fallback-content">
+                    <div class="at-analytics-fallback-icon">
+                        <?php echo $this->get_icon_svg('settings'); ?>
+                    </div>
+                    <h3>Google Analytics nicht konfiguriert</h3>
+                    <p>Bitte hinterlege deine Google Analytics Property ID in den Einstellungen.</p>
+                    <a href="#einstellungen" class="button at-button is-primary at-nav-item">
+                        Zu den Einstellungen
+                    </a>
+                </div>
+            </div>
+            <?php
+            return;
+        }
+    
+        // Case 3 & 4: Property ID Validierung und Berechtigungsprüfung
+        try {
+            $analytics_api = new GoogleAnalyticsAPI($property_id);
+            $validation_result = $analytics_api->validate_property();
+            
+            if ($validation_result === 'invalid_property') {
+                // Case 3: Fehlerhafte Property ID
+                ?>
+                <div class="at-analytics-fallback">
+                    <div class="at-analytics-fallback-content">
+                        <div class="at-analytics-fallback-icon">
+                            <?php echo $this->get_icon_svg('alert-triangle'); ?>
+                        </div>
+                        <h3>Property ID ungültig</h3>
+                        <p>Die eingetragene Google Analytics Property ID scheint nicht zu existieren. Bitte überprüfe die ID.</p>
+                        <a href="#einstellungen" class="button at-button is-primary at-nav-item">
+                            Zu den Einstellungen
+                        </a>
+                    </div>
+                </div>
+                <?php
+                return;
+            } elseif ($validation_result === 'permission_denied') {
+                // Case 4: Keine Berechtigung
+                ?>
+                <div class="at-analytics-fallback">
+                    <div class="at-analytics-fallback-content">
+                        <div class="at-analytics-fallback-icon">
+                            <?php echo $this->get_icon_svg('user-x'); ?>
+                        </div>
+                        <h3>Keine Berechtigung</h3>
+                        <p>Der VIERLESS Service Account hat keine Berechtigung auf diese Property zuzugreifen. Bitte füge service@vierless.de als Benutzer in den Google Analytics Einstellungen hinzu.</p>
+                        <a href="https://analytics.google.com/analytics/web/#/a<?php echo esc_attr(str_replace('GA-', '', $property_id)); ?>/admin/accountUsersAndProperties" 
+                           class="button at-button is-primary"
+                           target="_blank">
+                            Zu den GA Einstellungen
+                        </a>
+                    </div>
+                </div>
+                <?php
+                return;
+            }
+        } catch (Exception $e) {
+            // Generischer Fehler-Fallback
+            ?>
+            <div class="at-analytics-fallback">
+                <div class="at-analytics-fallback-content">
+                    <div class="at-analytics-fallback-icon">
+                        <?php echo $this->get_icon_svg('alert-circle'); ?>
+                    </div>
+                    <h3>Verbindungsfehler</h3>
+                    <p>Es konnte keine Verbindung zu Google Analytics hergestellt werden. Bitte versuche es später erneut.</p>
+                </div>
+            </div>
+            <?php
+            return;
+        }
+    
+        // Wenn wir hier ankommen, ist alles in Ordnung und wir können true zurückgeben
+        return true;
+    }
+
+    private function get_cache_timestamp($cache_key) {
+        global $wpdb;
+        
+        // Prüfen ob die Daten gerade erst geladen wurden
+        if (isset($_POST['action']) && $_POST['action'] === 'get_analytics_data' && 
+            (!isset($_POST['from_cache_only']) || $_POST['from_cache_only'] !== 'true')) {
+            return 'Gerade eben';
+        }
+        
+        // Timeout des Transients holen
+        $timeout = get_option('_transient_timeout_' . $cache_key);
+        
+        if (!$timeout) {
+            return 'Jetzt';
+        }
+        
+        // Cache-Erstellungszeit berechnen (Timeout - Cache-Dauer)
+        $cache_duration = 7200; // Standard: 2 Stunden
+        $creation_time = $timeout - $cache_duration;
+        
+        // Aktuelle Zeit
+        $current_time = time();
+        
+        // Zeitdifferenz in Minuten
+        $diff_minutes = round(($current_time - $creation_time) / 60);
+        
+        if ($diff_minutes < 1) {
+            return 'Gerade eben';
+        } elseif ($diff_minutes < 60) {
+            return "Vor $diff_minutes " . ($diff_minutes == 1 ? 'Minute' : 'Minuten');
+        } elseif ($diff_minutes < 1440) { // weniger als 24 Stunden
+            $hours = round($diff_minutes / 60);
+            return "Vor $hours " . ($hours == 1 ? 'Stunde' : 'Stunden');
+        } else {
+            $days = round($diff_minutes / 1440);
+            return "Vor $days " . ($days == 1 ? 'Tag' : 'Tagen');
+        }
+    }
+
     private function get_spotify_status() {
         $client_id = get_option('spotify-client-id');
         $client_secret = get_option('spotify_client_secret');
@@ -861,6 +1259,18 @@ class AlfredsToolboxSettings {
             return '<span style="color: red;">⚠️ API-Zugangsdaten fehlen</span>';
         }
         return '<span style="color: green;">✓ Aktiv</span>';
+    }
+
+    public function render_ga_property_id_field() {
+        $value = get_option('ga_property_id');
+        echo '<input type="text" placeholder="GA-XXXXXXXXX" name="ga_property_id" value="' . esc_attr($value) . '" 
+              class="regular-text at-input" autocomplete="off">';
+    }
+
+    public function render_ga_api_secret_field() {
+        $value = get_option('ga_api_secret');
+        echo '<input type="text" placeholder="8172381248989hasjdhkjhasdh" name="ga_api_secret" value="' . esc_attr($value) . '" 
+              class="regular-text at-input" autocomplete="off">';
     }
 
     public function render_client_id_field() {
@@ -875,48 +1285,10 @@ class AlfredsToolboxSettings {
               class="regular-text at-input" autocomplete="off">';
     }
 
-    public function render_awork_project_field() {
-        $value = get_option('awork_project_id');
-        echo '<input type="text" name="awork_project_id" value="' . esc_attr($value) . '" 
+    public function render_support_id_field() {
+        $value = get_option('support_id');
+        echo '<input type="text" name="support_id" value="' . esc_attr($value) . '" 
               class="regular-text at-input" autocomplete="off">';
-    }
-    
-    public function render_slack_channel_field() {
-        $value = get_option('slack_channel_id');
-        echo '<input type="text" name="slack_channel_id" value="' . esc_attr($value) . '" 
-              class="regular-text at-input" autocomplete="off">';
-    }
-
-    public function render_developer_field() {
-        $value = get_option('developer', 'rec87KE3hSmFzgq20');
-        $options = [
-            'rec87KE3hSmFzgq20' => 'Julian Witzel',
-            'recZTtGK5QLkTsHFe' => 'Nicole Logiewa'
-        ];
-        
-        echo '<select name="developer" class="at-select" autocomplete="off">';
-        foreach ($options as $id => $name) {
-            echo '<option value="' . esc_attr($id) . '" ' . 
-                 selected($value, $id, false) . '>' . 
-                 esc_html($name) . '</option>';
-        }
-        echo '</select>';
-    }
-    
-    public function render_project_manager_field() {
-        $value = get_option('projectmanager', 'recPFPXHW30lTbUyQ');
-        $options = [
-            'recPFPXHW30lTbUyQ' => 'Leonardo Lemos Rilk',
-            'recbI0ZSM1VKTjFvK' => 'Claus Wiedemann'
-        ];
-        
-        echo '<select name="projectmanager" class="at-select" autocomplete="off">';
-        foreach ($options as $id => $name) {
-            echo '<option value="' . esc_attr($id) . '" ' . 
-                 selected($value, $id, false) . '>' . 
-                 esc_html($name) . '</option>';
-        }
-        echo '</select>';
     }
     
     private function get_support_package_options() {
@@ -1028,6 +1400,11 @@ class AlfredsToolboxSettings {
     
         wp_localize_script('alfreds-toolbox-admin-scripts', 'alfreds_toolbox', [
             'nonce' => wp_create_nonce('alfreds_toolbox_settings')
+        ]);
+
+        wp_localize_script('alfreds-toolbox-admin-scripts', 'alfreds_toolbox', [
+            'nonce' => wp_create_nonce('alfreds_toolbox_settings'),
+            'plugin_url' => plugins_url('', dirname(__FILE__))
         ]);
     }
 }
