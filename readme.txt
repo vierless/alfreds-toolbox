@@ -3,7 +3,7 @@ Contributors: vierless, julianwitzel
 Tags: Elementor, Widgets, VIERLESS, Alfred
 Requires at least: 6.6.2
 Tested up to: 6.6.2
-Stable tag: 1.0.7
+Stable tag: 1.0.8
 Requires PHP: 8.0
 License: Proprietary
 License URI: https://vierless.de/lizenz/
@@ -54,6 +54,10 @@ Alfreds Toolbox wurde nach höchsten Sicherheitsstandards entwickelt und wird re
 * Nutzen Sie die erweiterten Widgets nach Belieben
 
 == Changelog ==
+
+= 1.0.8 =
+* Changed credentials and folder structure
+* Added licensing system with Airtable via API
 
 = 1.0.7 =
 * Added Statistik tab

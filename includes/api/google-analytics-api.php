@@ -1,20 +1,21 @@
 <?php
+require_once plugin_dir_path(__FILE__) . 'alfreds-toolbox-api.php';
+
 class GoogleAnalyticsAPI {
-    private $credentials_path;
+    private $api_client;
     private $property_id;
     private $cache_duration = [
-        'today' => 900,         // 15 Minuten für "Heute" (häufigere Updates)
-        'yesterday' => 86400,   // 24h für "Gestern" (statisch)
-        'last7days' => 3600,    // 1h für "Letzte 7 Tage"
-        'last30days' => 7200,   // 2h für "Letzte 30 Tage"
-        'thisMonth' => 3600,    // 1h für "Dieser Monat"
-        'lastMonth' => 86400    // 24h für "Letzter Monat" (statisch)
+        'today' => 900,
+        'yesterday' => 86400,
+        'last7days' => 3600,
+        'last30days' => 7200,
+        'thisMonth' => 3600,
+        'lastMonth' => 86400
     ];
     
     public function __construct($property_id) {
         $this->property_id = $property_id;
-        require_once plugin_dir_path(__FILE__) . 'services/google-credentials.php';
-        $this->credentials = get_google_credentials();
+        $this->api_client = new AlfredsToolboxAPI();
     }
 
     public function clear_cache() {
@@ -23,7 +24,17 @@ class GoogleAnalyticsAPI {
         $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_timeout_ga_data_%'");
     }
 
+    private function check_license() {
+        $api_client = new AlfredsToolboxAPI();
+        $validation = $api_client->validate_license();
+        
+        if (!$validation['success']) {
+            throw new Exception('Keine gültige Lizenz vorhanden');
+        }
+    }
+
     public function validate_property() {
+        $this->check_license();
         try {
             $access_token = $this->get_access_token();
             
@@ -72,6 +83,7 @@ class GoogleAnalyticsAPI {
     }
     
     public function get_analytics_data($date_range = 'last30days') {
+        $this->check_license();
         $cache_key = 'ga_data_' . $this->property_id . '_' . $date_range;
         $cached = get_transient($cache_key);
         
@@ -115,6 +127,7 @@ class GoogleAnalyticsAPI {
     }
 
     private function fetch_from_api($date_range, $retry = 0) {
+        $this->check_license();
         try {
             $access_token = $this->get_access_token();
             $dates = $this->get_date_range($date_range);
@@ -255,6 +268,7 @@ class GoogleAnalyticsAPI {
     }
 
     public function validate_against_ga($date_range = 'last30days') {
+        $this->check_license();
         $api_data = $this->get_analytics_data($date_range);
         
         return [
@@ -270,6 +284,7 @@ class GoogleAnalyticsAPI {
     }
 
     private function format_analytics_data($data) {
+        $this->check_license();
         $overview_metrics = $data['overview']['rows'][0]['metricValues'] ?? [];
         $total_users = isset($overview_metrics[0]['value']) ? (int) $overview_metrics[0]['value'] : 0;
         
@@ -903,8 +918,8 @@ class GoogleAnalyticsAPI {
             return $svg_cache[$code];
         }
         
-        $flag_path = plugin_dir_path(dirname(__FILE__)) . 'assets/icons/flags/' . $code . '.svg';
-        $globe_path = plugin_dir_path(dirname(__FILE__)) . 'assets/icons/flags/globe.svg';
+        $flag_path = ALFREDS_TOOLBOX_PATH . 'assets/icons/flags/' . $code . '.svg';
+        $globe_path = ALFREDS_TOOLBOX_PATH . 'assets/icons/flags/globe.svg';
         
         $svg_path = file_exists($flag_path) ? $flag_path : $globe_path;
         
@@ -950,8 +965,8 @@ class GoogleAnalyticsAPI {
         }
         
         // Pfade zu den SVGs
-        $browser_path = plugin_dir_path(dirname(__FILE__)) . 'assets/icons/browsers/' . $browser . '.svg';
-        $default_path = plugin_dir_path(dirname(__FILE__)) . 'assets/icons/browsers/browser-default.svg';
+        $browser_path = ALFREDS_TOOLBOX_PATH . 'assets/icons/browsers/' . $browser . '.svg';
+        $default_path = ALFREDS_TOOLBOX_PATH . 'assets/icons/browsers/browser-default.svg';
         
         // Versuche Browser-Icon zu laden, ansonsten nutze Default
         $svg_path = file_exists($browser_path) ? $browser_path : $default_path;
@@ -974,6 +989,7 @@ class GoogleAnalyticsAPI {
     }
 
     private function get_date_range($range) {
+        $this->check_license();
         // WordPress Zeitzone holen
         $wp_timezone = wp_timezone();
         
@@ -1057,13 +1073,21 @@ class GoogleAnalyticsAPI {
     }
 
     private function get_access_token() {
-        $cache_key = 'ga_access_token_' . $this->property_id;
-        $cached_token = get_transient($cache_key);
+        $this->check_license();
+        $cache_key = 'ga_access_token'; // Cache-Key definieren
         
-        if ($cached_token !== false) {
+        // Prüfe ob ein gültiger Token im Cache ist
+        $cached_token = get_transient($cache_key);
+        if ($cached_token) {
             return $cached_token;
         }
-
+    
+        $credentials = $this->api_client->get_credentials('service_account');
+        
+        if (!$credentials) {
+            throw new Exception('No valid credentials found');
+        }
+    
         $token_url = 'https://oauth2.googleapis.com/token';
         
         $header = [
@@ -1073,14 +1097,14 @@ class GoogleAnalyticsAPI {
         
         $time = time();
         $claim_set = [
-            'iss' => $this->credentials['client_email'],
+            'iss' => $credentials['client_email'],
             'scope' => 'https://www.googleapis.com/auth/analytics.readonly',
-            'aud' => $this->credentials['token_uri'],
+            'aud' => 'https://oauth2.googleapis.com/token',
             'exp' => $time + 3600,
             'iat' => $time
         ];
         
-        $jwt = $this->create_jwt($header, $claim_set, $this->credentials['private_key']);
+        $jwt = $this->create_jwt($header, $claim_set, $credentials['private_key']);
         
         $response = wp_remote_post($token_url, [
             'body' => [
@@ -1117,6 +1141,7 @@ class GoogleAnalyticsAPI {
     }
 
     public function preload_range($range) {
+        $this->check_license();
         $cache_key = 'ga_data_' . $this->property_id . '_' . $range;
         if (false === get_transient($cache_key)) {
             try {
@@ -1131,18 +1156,86 @@ class GoogleAnalyticsAPI {
     }
 
     private function create_jwt($header, $claim_set, $private_key) {
+        $this->check_license();
+        // Debug-Ausgabe des übergebenen Schlüssels
+        error_log('Received Private Key: ' . substr($private_key, 0, 50) . '...');
+        
+        // Normalisiere den Schlüssel
+        $private_key = $this->normalize_private_key($private_key);
+        
+        // Debug-Ausgabe des normalisierten Schlüssels
+        error_log('Normalized Private Key: ' . substr($private_key, 0, 50) . '...');
+        
+        // Base64 encode der Header
         $encoded_header = $this->base64url_encode(json_encode($header));
+        
+        // Base64 encode der Claim Set
         $encoded_claim_set = $this->base64url_encode(json_encode($claim_set));
         
+        // Erstelle die Signatur Input String
         $signature_input = $encoded_header . '.' . $encoded_claim_set;
         
-        $key_id = openssl_pkey_get_private($private_key);
-        openssl_sign($signature_input, $signature, $key_id, 'SHA256');
-        openssl_free_key($key_id);
+        // Erstelle die Signatur
+        $key_resource = openssl_pkey_get_private($private_key);
         
+        if ($key_resource === false) {
+            throw new Exception('Invalid private key format: ' . openssl_error_string());
+        }
+        
+        $signature = '';
+        $sign_success = openssl_sign(
+            $signature_input,
+            $signature,
+            $key_resource,
+            OPENSSL_ALGO_SHA256
+        );
+        
+        if (!$sign_success) {
+            throw new Exception('Failed to create signature: ' . openssl_error_string());
+        }
+        
+        // Gebe den Key Resource frei
+        if (PHP_VERSION_ID < 80000) {
+            openssl_free_key($key_resource);
+        }
+        
+        // Encode die Signatur
         $encoded_signature = $this->base64url_encode($signature);
         
-        return $signature_input . '.' . $encoded_signature;
+        // Kombiniere alles zum finalen JWT
+        return $encoded_header . '.' . $encoded_claim_set . '.' . $encoded_signature;
+    }
+    
+    private function normalize_private_key($private_key) {
+        $this->check_license();
+        // Entferne eventuell vorhandene Whitespaces am Anfang und Ende
+        $private_key = trim($private_key);
+        
+        // Ersetze verschiedene Arten von Zeilenumbrüchen
+        $private_key = str_replace(['\\n', '\n', '\r', "\r"], "\n", $private_key);
+        
+        // Füge Header hinzu, falls nicht vorhanden
+        if (strpos($private_key, '-----BEGIN PRIVATE KEY-----') === false) {
+            $private_key = "-----BEGIN PRIVATE KEY-----\n" . $private_key;
+        }
+        
+        // Füge Footer hinzu, falls nicht vorhanden
+        if (strpos($private_key, '-----END PRIVATE KEY-----') === false) {
+            $private_key .= "\n-----END PRIVATE KEY-----";
+        }
+        
+        // Formatiere den Key korrekt mit Zeilenumbrüchen
+        $key_parts = explode("\n", $private_key);
+        $formatted_key = [];
+        
+        foreach ($key_parts as $line) {
+            $line = trim($line);
+            if (!empty($line)) {
+                $formatted_key[] = $line;
+            }
+        }
+        
+        return implode("\n", $formatted_key);
     }
     
     private function base64url_encode($data) {

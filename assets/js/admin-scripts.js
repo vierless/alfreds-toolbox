@@ -153,6 +153,14 @@ jQuery(document).ready(function ($) {
 				from_cache_only: fromCacheOnly,
 				nonce: alfreds_toolbox.nonce,
 			},
+			error: function (xhr) {
+				let errorMessage = 'Fehler beim Laden der Daten';
+				if (xhr.responseJSON && xhr.responseJSON.data) {
+					errorMessage = xhr.responseJSON.data.message;
+				}
+				// Zeige Fehlermeldung an und deaktiviere ggf. den Statistik-Tab
+				showError(errorMessage);
+			},
 		})
 			.then((response) => {
 				if (response.success && response.data) {
@@ -474,9 +482,18 @@ jQuery(document).ready(function ($) {
 	// Initial state: All closed
 	$('.at-faq-item').removeClass('is-active').find('.at-faq-description').hide();
 
+	function showError(message) {
+		const $statsContainer = $('#analytics-stats-container');
+		$statsContainer.html(`
+			<div class="at-message at-message-error">
+				<p>${message}</p>
+				<p>Bitte überprüfe deine Plugin-Lizenz unter Einstellungen.</p>
+			</div>
+		`);
+	}
+
 	// Settings Form Submit
 	$('#at-settings-form').on('submit', function (e) {
-		console.log('Form submitted');
 		e.preventDefault();
 
 		const $form = $(this);
@@ -502,7 +519,6 @@ jQuery(document).ready(function ($) {
 			const title = $(this).find('input[name^="tutorial_videos["][name$="[title]"]').val();
 			const loomId = $(this).find('input[name^="tutorial_videos["][name$="[loom_id]"]').val();
 			if (title || loomId) {
-				// Nur hinzufügen wenn mindestens ein Feld gefüllt ist
 				tutorialVideos.push({
 					title: title,
 					loom_id: loomId,
@@ -511,29 +527,30 @@ jQuery(document).ready(function ($) {
 		});
 		formData.append('settings[tutorial_videos]', JSON.stringify(tutorialVideos));
 
-		console.log('Tutorial Videos being sent:', tutorialVideos);
-
 		// Alle anderen Formularfelder
-		$form.find('input:not([name="alfreds_toolbox_active_widgets[]"]), select, textarea').each(function () {
+		$form.find('input, select, textarea').each(function () {
 			const $field = $(this);
 			const name = $field.attr('name');
 
-			if (!name || $field.attr('type') === 'submit' || name.startsWith('tutorial_videos[')) {
+			// Überspringe spezielle Felder
+			if (!name || name === 'alfreds_toolbox_active_widgets[]' || name.startsWith('tutorial_videos[') || $field.attr('type') === 'submit') {
 				return;
 			}
 
+			let value;
 			if ($field.attr('type') === 'checkbox') {
-				formData.append('settings[' + name + ']', $field.is(':checked') ? '1' : '0');
+				value = $field.is(':checked') ? '1' : '0';
 			} else if ($field.attr('type') === 'radio') {
-				if ($field.is(':checked')) {
-					formData.append('settings[' + name + ']', $field.val());
-				}
+				if (!$field.is(':checked')) return;
+				value = $field.val();
 			} else {
-				formData.append('settings[' + name + ']', $field.val());
+				value = $field.val();
 			}
-		});
 
-		console.log('Complete FormData:', Object.fromEntries(formData.entries()));
+			// Stelle sicher, dass leere Werte als leere Strings gesendet werden
+			value = value || '';
+			formData.append(`settings[${name}]`, value);
+		});
 
 		$.ajax({
 			url: ajaxurl,
@@ -549,8 +566,14 @@ jQuery(document).ready(function ($) {
 					const $message = $('<div class="at-message at-message-success">Einstellungen gespeichert</div>');
 					$form.prepend($message);
 					setTimeout(() => $message.fadeOut(() => $message.remove()), 3000);
+
+					// Nach erfolgreichem Speichern Seite neu laden
+					if (response.data && response.data.reload) {
+						location.reload();
+					}
 				} else {
-					const $message = $('<div class="at-message at-message-error">Fehler beim Speichern</div>');
+					const errorMessage = response.data && response.data.message ? response.data.message : 'Fehler beim Speichern';
+					const $message = $('<div class="at-message at-message-error">' + errorMessage + '</div>');
 					$form.prepend($message);
 				}
 			},

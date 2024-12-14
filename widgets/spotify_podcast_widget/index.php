@@ -10,7 +10,7 @@ class SpotifyPodcastWidget extends \Elementor\Widget_Base {
         $client_secret = get_option('alfreds_toolbox_spotify_client_secret');
         
         if ($client_id && $client_secret) {
-            require_once plugin_dir_path(dirname(dirname(__FILE__))) . 'includes/spotify-api.php';
+            require_once plugin_dir_path(dirname(dirname(__FILE__))) . 'includes/api/spotify-api.php';
             $this->spotify_api = new SpotifyAPI($client_id, $client_secret);
         }
 

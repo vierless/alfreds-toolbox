@@ -13,11 +13,37 @@ class AlfredsToolboxSettings {
         add_action('admin_init', [$this, 'handle_redirect'], 1);
         add_action('admin_menu', [$this, 'register_menu_pages']);
         add_action('admin_init', [$this, 'register_settings']);
+        add_action('update_option_alfreds_toolbox_license_key', [$this, 'validate_and_save_license'], 10, 0);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
         add_action('wp_ajax_clear_spotify_cache', [$this, 'handle_clear_cache']);
         add_action('wp_ajax_save_alfreds_toolbox_settings', [$this, 'handle_save_settings']);
         add_action('wp_ajax_get_analytics_data', [$this, 'handle_analytics_data']);
         add_action('wp_ajax_clear_analytics_cache', [$this, 'handle_analytics_cache_clear']);
+
+        // Standardwerte bei Aktivierung setzen
+        $this->ensure_options_exist();
+    }
+
+    private function ensure_options_exist() {
+        $default_options = [
+            'spotify_client_id' => '',
+            'spotify_client_secret' => '',
+            'spotify_cache_duration' => 3600,
+            'support_package' => 1,
+            'support_id' => '',
+            'intro_video' => '',
+            'replace_dashboard' => false,
+            'ga_property_id' => '',
+            'ga_api_secret' => '',
+            'tutorial_videos' => [],
+            'alfreds_toolbox_active_widgets' => []
+        ];
+    
+        foreach ($default_options as $option_name => $default_value) {
+            if (get_option($option_name) === false) {
+                add_option($option_name, $default_value);
+            }
+        }
     }
 
     public function handle_redirect() {
@@ -79,66 +105,102 @@ class AlfredsToolboxSettings {
         }
     
         $settings = $_POST['settings'] ?? [];
-        
-        error_log('Received settings data: ' . print_r($_POST['settings'], true));
-
-        if (isset($settings['alfreds_toolbox_active_widgets'])) {
-            $widget_string = stripslashes($settings['alfreds_toolbox_active_widgets']);
-            $active_widgets = json_decode($widget_string, true);
-            if (is_array($active_widgets)) {
-                update_option('alfreds_toolbox_active_widgets', $active_widgets);
-            }
-        }
+        $update_results = [];
     
-        $registered_settings = [
-            'spotify_client_id',
-            'spotify_client_secret',
-            'spotify_cache_duration',
-            'support_id',
-            'support_package',
-            'intro_video',
-            'ga_property_id',
-            'ga_api_secret',
-            'replace_dashboard'
+        // Option Mapping für korrekte Typen
+        $option_types = [
+            'spotify_client_id' => 'string',
+            'spotify_client_secret' => 'string',
+            'spotify_cache_duration' => 'integer',
+            'support_package' => 'integer',
+            'support_id' => 'string',
+            'intro_video' => 'string',
+            'ga_property_id' => 'string',
+            'ga_api_secret' => 'string',
+            'replace_dashboard' => 'boolean',
+            'alfreds_toolbox_license_key' => 'string'
         ];
     
-        error_log('Processing tutorial videos: ' . print_r($settings['tutorial_videos'] ?? 'no videos found', true));
-
-        if (isset($settings['tutorial_videos'])) {
-            $videos_data = json_decode(stripslashes($settings['tutorial_videos']), true);
-            $videos = [];
-            
-            if (is_array($videos_data)) { 
-                foreach ($videos_data as $video) {
-                    if (!empty($video['title']) && !empty($video['loom_id'])) {
-                        $videos[] = [
-                            'title' => sanitize_text_field($video['title']),
-                            'loom_id' => sanitize_text_field($video['loom_id'])
-                        ];
+        // Speziell den Lizenzschlüssel behandeln
+        if (isset($settings['alfreds_toolbox_license_key'])) {
+            $new_key = sanitize_text_field($settings['alfreds_toolbox_license_key']);
+            $old_key = get_option('alfreds_toolbox_license_key');
+    
+            if ($new_key !== $old_key) {
+                $api_client = new AlfredsToolboxAPI();
+                
+                if (empty($new_key)) {
+                    // Key wurde gelöscht
+                    delete_option('alfreds_toolbox_license_key');
+                    $api_client->clear_cache();
+                    $update_results['alfreds_toolbox_license_key'] = true;
+                } else {
+                    // Erst Key speichern
+                    update_option('alfreds_toolbox_license_key', $new_key);
+                    
+                    // Dann validieren
+                    $validation = $api_client->validate_license();
+                    if (!$validation['success']) {
+                        // Bei ungültigem Key: Alten Key wiederherstellen
+                        if ($old_key) {
+                            update_option('alfreds_toolbox_license_key', $old_key);
+                        } else {
+                            delete_option('alfreds_toolbox_license_key');
+                        }
+                        wp_send_json_error([
+                            'message' => $validation['message'],
+                            'results' => $update_results
+                        ]);
+                        return;
                     }
+                    $update_results['alfreds_toolbox_license_key'] = true;
                 }
-                $update_result = update_option('tutorial_videos', $videos);
-                error_log('Tutorial videos saved: ' . print_r($videos, true));
-                error_log('Update result: ' . ($update_result ? 'success' : 'failed'));
-            } else {
-                error_log('Failed to decode tutorial videos JSON: ' . $settings['tutorial_videos']);
             }
+            // Key aus den settings entfernen, damit er nicht in der normalen Verarbeitung landet
+            unset($settings['alfreds_toolbox_license_key']);
         }
-
-        foreach ($settings as $key => $value) {
-            if ($key !== 'alfreds_toolbox_active_widgets' && in_array($key, $registered_settings)) {
-                $sanitized_value = sanitize_text_field($value);
-                $update_result = update_option($key, $sanitized_value);
-                error_log("Saving option $key with value: $sanitized_value (Update successful: " . ($update_result ? 'yes' : 'no') . ")");
+    
+        // Alle anderen Optionen verarbeiten
+        foreach ($option_types as $key => $type) {
+            if (isset($settings[$key])) {
+                $value = $settings[$key];
+                
+                switch ($type) {
+                    case 'integer':
+                        $value = (int) $value;
+                        break;
+                    case 'boolean':
+                        $value = (bool) $value;
+                        break;
+                    case 'string':
+                    default:
+                        $value = sanitize_text_field($value);
+                        break;
+                }
+    
+                if (get_option($key) === false) {
+                    add_option($key, '');
+                }
+    
+                $update_result = update_option($key, $value);
+                $update_results[$key] = $update_result;
             }
         }
     
-        wp_send_json_success([
-            'message' => 'Einstellungen gespeichert',
-            'saved_settings' => array_map(function($key) {
-                return get_option($key);
-            }, array_keys($settings))
-        ]);
+        // Überprüfen, ob mindestens ein Update erfolgreich war
+        $any_successful = in_array(true, $update_results, true);
+    
+        if ($any_successful) {
+            wp_send_json_success([
+                'message' => 'Einstellungen wurden gespeichert',
+                'results' => $update_results
+            ]);
+        } else {
+            wp_send_json_error([
+                'message' => 'Fehler beim Speichern der Einstellungen',
+                'results' => $update_results
+            ]);
+        }
     }
 
     public function get_base_domain() {
@@ -158,41 +220,27 @@ class AlfredsToolboxSettings {
     }
 
     public function register_settings() {
-        // Spotify Settings
-        register_setting('alfreds_toolbox_settings', 'spotify_client_id');
-        register_setting('alfreds_toolbox_settings', 'spotify_client_secret');
-        register_setting('alfreds_toolbox_settings', 'spotify_cache_duration', [
-            'type' => 'integer',
-            'default' => 3600,
-            'sanitize_callback' => 'absint'
-        ]);
+        $settings_to_register = [
+            'spotify_client_id' => ['type' => 'string'],
+            'spotify_client_secret' => ['type' => 'string'],
+            'spotify_cache_duration' => ['type' => 'integer', 'default' => 3600],
+            'support_package' => ['type' => 'integer', 'default' => 1],
+            'support_id' => ['type' => 'string'],
+            'intro_video' => ['type' => 'string'],
+            'ga_property_id' => ['type' => 'string'],
+            'alfreds_toolbox_license_key' => ['type' => 'string'],
+            'replace_dashboard' => ['type' => 'boolean', 'default' => false],
+            'tutorial_videos' => ['type' => 'array', 'default' => []],
+            'alfreds_toolbox_active_widgets' => ['type' => 'array', 'default' => []]
+        ];
     
-        // Support Settings
-        register_setting('alfreds_toolbox_settings', 'support_package', [
-            'type' => 'integer',
-            'default' => 1
-        ]);
-        register_setting('alfreds_toolbox_settings', 'support_id');
-    
-        // GA Settings
-        register_setting('alfreds_toolbox_settings', 'ga_property_id');
-        register_setting('alfreds_toolbox_settings', 'ga_api_secret');
-
-        // Dashboard Settings
-        register_setting('alfreds_toolbox_settings', 'intro_video');
-        register_setting('alfreds_toolbox_settings', 'replace_dashboard', ['type' => 'boolean', 'default' => false]);
-
-        // Add tutorial videos setting
-        register_setting('alfreds_toolbox_settings', 'tutorial_videos', [
-            'type' => 'array',
-            'default' => [],
-            'sanitize_callback' => [$this, 'sanitize_tutorial_videos']
-        ]);
-
-        // Widget Settings
-        register_setting('alfreds_toolbox_settings', 'alfreds_toolbox_active_widgets', [
-            'default' => []
-        ]);
+        foreach ($settings_to_register as $option_name => $args) {
+            register_setting('alfreds_toolbox_settings', $option_name, $args);
+            
+            if (get_option($option_name) === false) {
+                add_option($option_name, $args['default'] ?? '');
+            }
+        }
     }
 
     public function sanitize_tutorial_videos($videos) {
@@ -408,7 +456,7 @@ class AlfredsToolboxSettings {
                 </nav>
                 <div class="at-meta">
                     <div class="at-copyright">© 2024 VIERLESS GmbH</div>
-                    <div class="at-version">V.1.0.7</div>
+                    <div class="at-version">V.1.0.8</div>
                 </div>
             </div>
     
@@ -422,7 +470,7 @@ class AlfredsToolboxSettings {
                     <h1 class="at-titlebar-title" id="current-section-title">Dashboard</h1>
                 </div>
 
-                <form action="options.php" method="post" id="at-settings-form">
+                <form action="options.php" method="post" id="at-settings-form" autocomplete="off">
                     <?php settings_fields('alfreds_toolbox_settings'); ?>
     
                     <!-- Dashboard Tab -->
@@ -1089,10 +1137,15 @@ class AlfredsToolboxSettings {
                                     <label class="at-label" for="support">Property ID</label>
                                     <?php $this->render_ga_property_id_field(); ?>
                                 </div>
-
+                            </fieldset>
+                        </div>
+                        <div class="at-section">
+                            <h2 class="at-section-title">Lizenz</h2>
+                            <p class="at-section-description">Verbinde hier deine Plugin Lizenz.</p>
+                            <fieldset class="at-form-fieldset">
                                 <div class="at-form-group">
-                                    <label class="at-label" for="support_id">API Secret</label>
-                                    <?php $this->render_ga_api_secret_field(); ?>
+                                    <label class="at-label" for="alfreds_toolbox_license_key">Lizenzschlüssel</label>
+                                    <?php $this->render_lizenz_field(); ?>
                                 </div>
                             </fieldset>
                         </div>
@@ -1267,10 +1320,79 @@ class AlfredsToolboxSettings {
               class="regular-text at-input" autocomplete="off">';
     }
 
-    public function render_ga_api_secret_field() {
-        $value = get_option('ga_api_secret');
-        echo '<input type="text" placeholder="8172381248989hasjdhkjhasdh" name="ga_api_secret" value="' . esc_attr($value) . '" 
-              class="regular-text at-input" autocomplete="off">';
+    public function validate_and_save_license() {
+        if (!isset($_POST['alfreds_toolbox_license_key'])) {
+            return;
+        }
+    
+        $license_key = sanitize_text_field($_POST['alfreds_toolbox_license_key']);
+        $old_key = get_option('alfreds_toolbox_license_key');
+    
+        // Wenn der Key gelöscht oder geändert wurde
+        if ($license_key !== $old_key) {
+            // API Client instanziieren
+            $api_client = new AlfredsToolboxAPI();
+            
+            // Cache leeren
+            $api_client->clear_cache();
+            
+            if (empty($license_key)) {
+                // Key wurde gelöscht
+                delete_option('alfreds_toolbox_license_key');
+                return;
+            }
+    
+            // Versuche den neuen Key zu validieren
+            $validation = $api_client->validate_license();
+            
+            if (!$validation['success']) {
+                add_settings_error(
+                    'alfreds_toolbox_license_key',
+                    'invalid_license',
+                    $validation['message'],
+                    'error'
+                );
+                // Alten Key beibehalten wenn der neue ungültig ist
+                update_option('alfreds_toolbox_license_key', $old_key);
+            }
+        }
+    }
+
+    public function render_lizenz_field() {
+        $value = get_option('alfreds_toolbox_license_key');
+        $validation = $this->validate_license_key($value);
+        
+        echo '<div class="at-license-field">';
+        echo '<input type="text" 
+            name="alfreds_toolbox_license_key" 
+            value="' . esc_attr($value) . '" 
+            class="regular-text at-input" 
+            placeholder="XXXX-XXXX-XXXX-XXXX">';
+        
+        if ($value) {
+            if ($validation['success']) {
+                echo '<span class="at-license-status success">
+                    <span class="dashicons dashicons-yes-alt"></span> Lizenz aktiv
+                </span>';
+            } else {
+                echo '<span class="at-license-status error">
+                    <span class="dashicons dashicons-warning"></span> ' . esc_html($validation['message']) . '
+                </span>';
+            }
+        }
+        echo '</div>';
+    }
+    
+    private function validate_license_key($key) {
+        if (empty($key)) {
+            return [
+                'success' => false,
+                'message' => 'Kein Lizenzschlüssel hinterlegt'
+            ];
+        }
+    
+        $api_client = new AlfredsToolboxAPI();
+        return $api_client->validate_license();
     }
 
     public function render_client_id_field() {
@@ -1281,7 +1403,7 @@ class AlfredsToolboxSettings {
     
     public function render_client_secret_field() {
         $value = get_option('spotify_client_secret');
-        echo '<input type="password" name="spotify_client_secret" value="' . esc_attr($value) . '" 
+        echo '<input type="text" name="spotify_client_secret" value="' . esc_attr($value) . '" 
               class="regular-text at-input" autocomplete="off">';
     }
 
